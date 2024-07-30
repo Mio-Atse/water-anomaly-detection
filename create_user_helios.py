@@ -1,21 +1,34 @@
 import os
 import pandas as pd
 
-def process_helios_dataset(input_path, output_path):
+def process_helios_dataset(input_folder, output_folder):
     # Ensure the output directory exists
-    if not os.path.exists(output_path):
-        os.makedirs(output_path)
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
 
-    # Read the dataset
-    data = pd.read_csv(input_path, delimiter=';')
+    # Initialize an empty DataFrame to concatenate all data
+    all_data = pd.DataFrame()
+
+    # Read all CSV files in the input folder
+    for file_name in os.listdir(input_folder):
+        if file_name.endswith('.csv'):
+            file_path = os.path.join(input_folder, file_name)
+            data = pd.read_csv(file_path, delimiter=';')
+
+            # Concatenate data
+            all_data = pd.concat([all_data, data])
+
+    # Filter to keep only the necessary columns
+    all_data = all_data[['user key', 'datetime', 'meter reading', 'diff']]
 
     # Get unique user keys
-    user_keys = data['user key'].unique()
+    user_keys = all_data['user key'].unique()
 
-    # Create separate files for each user
+    # Create separate files for each user, excluding 'user key'
     for user_key in user_keys:
-        user_data = data[data['user key'] == user_key]
-        user_data.to_csv(os.path.join(output_path, f'{user_key}.csv'), index=False, sep=';')
+        user_data = all_data[all_data['user key'] == user_key]
+        user_data = user_data[['datetime', 'meter reading', 'diff']]
+        user_data.to_csv(os.path.join(output_folder, f'{user_key}.csv'), index=False, sep=';')
 
     print("Helios dataset files created successfully.")
 
@@ -50,9 +63,9 @@ def main():
     dataset_choice = input("Which dataset do you want to process? (helios/datamill): ").strip().lower()
 
     if dataset_choice == 'helios':
-        input_path = './dataset/helios/org dataset full'
-        output_path = './dataset/user dataset'
-        process_helios_dataset(input_path, output_path)
+        input_folder = './dataset/helios/org dataset full'
+        output_folder = './dataset/helios/user_dataset_solid'
+        process_helios_dataset(input_folder, output_folder)
     elif dataset_choice == 'datamill':
         input_folder = './dataset/datamill/org dataset'
         output_folder = './dataset/datamill/user_dataset'
