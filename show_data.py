@@ -22,7 +22,7 @@ def plot_water_usage_from_files(csv_folder, dataset_type='queensland'):
             process_queensland_data(df, csv_file)
         elif dataset_type == 'helios':
             process_helios_data(df, csv_file)
-        elif dataset_type == 'datamill  ':
+        elif dataset_type == 'datamill':
             process_datamil_data(df, csv_file)
         else:
             print(f"Unknown dataset type: {dataset_type}")
@@ -96,10 +96,10 @@ def process_datamil_data(df, csv_file):
 
 if __name__ == '__main__':
     # Specify the folder where your CSV files are located
-    csv_folder = './'
+    csv_folder = './dataset/datamill'
 
     # Specify the dataset type: 'queensland', 'helios', or 'datamil'
-    dataset_type = 'helios'  # Change this to the desired dataset type
+    dataset_type = 'datamill'  # Change this to the desired dataset type
 
     # Call the function to plot water usage for each CSV file
     plot_water_usage_from_files(csv_folder, dataset_type)

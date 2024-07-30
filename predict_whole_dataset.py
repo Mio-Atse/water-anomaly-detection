@@ -1,7 +1,6 @@
 import os
 import pandas as pd
 import numpy as np
-import pickle
 from pyod.models.iforest import IForest
 from pyod.models.knn import KNN
 from pyod.models.lof import LOF
@@ -153,11 +152,11 @@ while dataset_type not in ['helios', 'queensland']:
 
 # Set the folder path and models path based on the dataset type
 if dataset_type == 'helios':
-    folder_path = './dataset/helios/user dataset'
+    folder_path = './dataset/helios/user_dataset_sorted'
     models_path = './models/helios'
 else:
     folder_path = './sorted_pulsetot'  # Replace with the actual path
-    models_path = './'
+    models_path = './models/queensland'
 
 print(f"Selected dataset type: {dataset_type}")
 print(f"Folder path: {folder_path}")
