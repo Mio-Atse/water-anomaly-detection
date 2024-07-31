@@ -1,173 +1,147 @@
 import pandas as pd
-import matplotlib.pyplot as plt
-from adtk.data import validate_series
-from adtk.detector import (
-    ThresholdAD, QuantileAD, PersistAD, SeasonalAD, 
-    InterQuartileRangeAD, AutoregressionAD
-)
 import glob
 import os
+import matplotlib.pyplot as plt
+from adtk.data import validate_series
+from adtk.detector import ThresholdAD, InterQuartileRangeAD, PersistAD, LevelShiftAD, VolatilityShiftAD
 
-def plot_water_usage_from_files(csv_folder):
-    # Find all CSV files in the specified folder
-    csv_files = glob.glob(os.path.join(csv_folder, '*.csv'))
+def process_datamill(file_path):
+    df = pd.read_csv(file_path)
+    df['READING_START_DATE'] = pd.to_datetime(df['READING_START_DATE'], format='%d/%m/%Y %H:%M')
+    df = df.set_index('READING_START_DATE')
+    return df['GROSS_CONSUMPTION']
 
-    # Iterate through each CSV file
-    for csv_file in csv_files:
-        print(f"Processing file: {csv_file}")
-
-        # Read the CSV file into a DataFrame
-        df = pd.read_csv(csv_file)
-
-        # Convert 'time' column to datetime format
-        df['time'] = pd.to_datetime(df['time'])
-
-        # Filter only the rows where typeM is 'Pulse1_Total' and Value is numeric
-        filtered_data = df[df['typeM'] == 'Pulse1_Total']
-        filtered_data['Value'] = pd.to_numeric(filtered_data['Value'], errors='coerce')
-
-        # Group by 'time' and sum 'Value' for water usage over time
-        usage_by_time = filtered_data.groupby('time')['Value'].sum()
-
-        # Create and validate the time series
-        series = validate_series(usage_by_time)
-
-        # Define anomaly detection methods
-        threshold_ad = ThresholdAD(high=series.quantile(0.99), low=series.quantile(0.01))
-        quantile_ad = QuantileAD(high=0.99, low=0.01)
-        persist_ad = PersistAD(min_duration='1 hour', threshold=series.quantile(0.99))
-        seasonal_ad = SeasonalAD(c=3.0, side='both')
-        iqr_ad = InterQuartileRangeAD(c=1.5)
-        autoregression_ad = AutoregressionAD(n_steps=10, step_size=1)
-
-        # Detect anomalies
-        anomalies_threshold = threshold_ad.detect(series)
-        anomalies_quantile = quantile_ad.fit_detect(series)
-        anomalies_persist = persist_ad.detect(series)
-        anomalies_seasonal = seasonal_ad.detect(series)
-        anomalies_iqr = iqr_ad.detect(series)
-        anomalies_autoregression = autoregression_ad.fit_detect(series)  # Fixed
-
-        # Visualize anomaly detections
-        def plot_anomalies(series, anomalies, title):
-            plt.figure(figsize=(15, 5))
-            plt.plot(series.index, series.values, label='Data')
-            anomalies = anomalies.fillna(False)  # Handle NaN values
-            plt.scatter(series[anomalies].index, series[anomalies].values, color='red', label='Anomalies')
-            plt.title(title)
-            plt.legend()
-            plt.xlabel('Time')
-            plt.ylabel('Value')
-            plt.tight_layout()
-            plt.show()
-
-        # Plot each anomaly detection method
-        plot_anomalies(series, anomalies_threshold, 'Threshold Anomalies')
-        plot_anomalies(series, anomalies_quantile, 'Quantile Anomalies')
-        plot_anomalies(series, anomalies_persist, 'Persist Anomalies')
-        plot_anomalies(series, anomalies_seasonal, 'Seasonal Anomalies')
-        plot_anomalies(series, anomalies_iqr, 'IQR Anomalies')
-        plot_anomalies(series, anomalies_autoregression, 'Autoregression Anomalies')
-
-        # Combine anomaly detections
-        anomalies_combined = (anomalies_threshold | anomalies_quantile |
-                              anomalies_persist | anomalies_seasonal |
-                              anomalies_iqr | anomalies_autoregression)
-
-        # Plot combined anomalies
-        plot_anomalies(series, anomalies_combined, 'Combined Anomalies')
-
-        # Print results
-        print("Threshold Anomalies:\n", anomalies_threshold)
-        print("Quantile Anomalies:\n", anomalies_quantile)
-        print("Persist Anomalies:\n", anomalies_persist)
-        print("Seasonal Anomalies:\n", anomalies_seasonal)
-        print("IQR Anomalies:\n", anomalies_iqr)
-        print("Autoregression Anomalies:\n", anomalies_autoregression)
-        print("Combined Anomalies:\n", anomalies_combined)
-
-def process_helios_data(csv_file):
-    # Read the first 1000 rows of the CSV file into a DataFrame
-    df = pd.read_csv(csv_file, delimiter=';')
-
-    # Convert 'datetime' column to datetime format
+def process_helios(file_path, option):
+    df = pd.read_csv(file_path, sep=';')
     df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
+    df = df.set_index('datetime')
+    if option == 'daily':
+        return df['diff']
+    else:  # total
+        return df['meter reading']
 
-    # Sort the dataframe by datetime
-    df = df.sort_values('datetime')
+def process_queensland(file_path, option):
+    df = pd.read_csv(file_path)
+    df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
+    df = df.set_index('datetime')
+    if option == 'pulse1':
+        return df['Pulse1']
+    else:  # pulse1_total
+        return df['Pulse1_Total']
 
-    # Create and validate the time series
-    series = validate_series(df.set_index('datetime')['diff'])
-
-    # Define anomaly detection methods
-    threshold_ad = ThresholdAD(high=series.quantile(0.9999), low=series.quantile(0.0001))
-    quantile_ad = QuantileAD(high=0.99999, low=0.00001)
-    persist_ad = PersistAD(c=3.0, side='positive')  # Fixed
-    seasonal_ad = SeasonalAD(c=3.0, side='both')
+def detect_anomalies(s, contamination, z_score_threshold):
+    s = validate_series(s)
+    
+    threshold_ad = ThresholdAD(high=s.mean() + z_score_threshold * s.std(), 
+                               low=s.mean() - z_score_threshold * s.std())
     iqr_ad = InterQuartileRangeAD(c=1.5)
-    autoregression_ad = AutoregressionAD(n_steps=7*2, step_size=24, c=3.0)
+    persist_ad = PersistAD(c=3.0, side='positive')
+    level_shift_ad = LevelShiftAD(c=2.0, side='both', window=5)
+    volatility_shift_ad = VolatilityShiftAD(c=1.5, side='positive', window=30)
 
-    # Detect anomalies
-    anomalies_threshold = threshold_ad.detect(series)
-    anomalies_quantile = quantile_ad.fit_detect(series)
-    anomalies_persist = persist_ad.fit_detect(series)
-    #anomalies_seasonal = seasonal_ad.fit_detect(series)
-    anomalies_iqr = iqr_ad.fit_detect(series)
-    anomalies_autoregression = autoregression_ad.fit_detect(series)  # Fixed
+    anomalies = {}
+    anomalies['Threshold'] = threshold_ad.detect(s).fillna(False)
+    anomalies['IQR'] = iqr_ad.fit_detect(s).fillna(False)
+    anomalies['Persist'] = persist_ad.fit_detect(s).fillna(False)
+    anomalies['LevelShift'] = level_shift_ad.fit_detect(s).fillna(False)
+    try:
+        anomalies['VolatilityShift'] = volatility_shift_ad.fit_detect(s).fillna(False)
+    except RuntimeError as e:
+        print(f"VolatilityShiftAD could not be applied: {e}")
+        anomalies['VolatilityShift'] = pd.Series(False, index=s.index)
 
-    # Combine anomaly detections
-    anomalies_combined = (anomalies_threshold | anomalies_quantile |
-                          anomalies_persist | #anomalies_seasonal |
-                          anomalies_iqr | anomalies_autoregression)
+    return anomalies
 
-    # Visualize anomaly detections
-    def plot_anomalies(series, anomalies, title):
-        plt.figure(figsize=(15, 5))
-        plt.plot(series.index, series.values, label='Data')
-        anomalies = anomalies.fillna(False)  # Handle NaN values
-        plt.scatter(series[anomalies].index, series[anomalies].values, color='red', label='Anomalies')
-        plt.title(title)
-        plt.legend()
-        plt.xlabel('Time')
-        plt.ylabel('Meter Reading')
-        plt.tight_layout()
-        plt.show()
 
-    # Plot each anomaly detection method
-    plot_anomalies(series, anomalies_threshold, 'Threshold Anomalies')
-    plot_anomalies(series, anomalies_quantile, 'Quantile Anomalies')
-    plot_anomalies(series, anomalies_persist, 'Persist Anomalies')
-    #plot_anomalies(series, anomalies_seasonal, 'Seasonal Anomalies')
-    plot_anomalies(series, anomalies_iqr, 'IQR Anomalies')
-    plot_anomalies(series, anomalies_autoregression, 'Autoregression Anomalies')
+def plot_consensus_anomalies(s, anomalies, file_path):
+    # Calculate the consensus anomalies where all models agree
+    consensus_anomalies = pd.DataFrame(anomalies).all(axis=1)
 
-    # Plot combined anomalies
-    plot_anomalies(series, anomalies_combined, 'Combined Anomalies')
+    # Drop any missing values to avoid index alignment issues
+    consensus_anomalies = consensus_anomalies.dropna()
+    s = s.dropna()
 
-    # Print results
-    print("Threshold Anomalies:\n", anomalies_threshold)
-    print("Quantile Anomalies:\n", anomalies_quantile)
-    print("Persist Anomalies:\n", anomalies_persist)
-    #print("Seasonal Anomalies:\n", anomalies_seasonal)
-    print("IQR Anomalies:\n", anomalies_iqr)
-    print("Autoregression Anomalies:\n", anomalies_autoregression)
-    print("Combined Anomalies:\n", anomalies_combined)
+    # Filter the consensus anomalies
+    consensus_indices = consensus_anomalies[consensus_anomalies].index
 
-def main():
-    dataset_choice = input("Choose dataset (1 for water meter, 2 for Helios): ")
+    # Ensure indices in s align with the consensus_indices
+    consensus_values = s.loc[consensus_indices]
 
-    if dataset_choice == '1':
-        # Specify the folder where your water meter CSV files are located
-        csv_folder = './dataset/queensland/july/Digital Meter Data  - July02.csv'
-        # Call the function to plot water usage for each CSV file
-        plot_water_usage_from_files(csv_folder)
-    elif dataset_choice == '2':
-        # Specify the Helios CSV file
-        csv_file = './dataset/helios/user dataset/fddc248c-0b61-4f1e-85a0-f672e6fd0d48.csv'
-        # Call the function to process and plot Helios data
-        process_helios_data(csv_file)
+    # Check if both consensus_indices and consensus_values have the same length
+    if len(consensus_indices) != len(consensus_values):
+        print(f"Index mismatch detected. Length of indices: {len(consensus_indices)}, Length of values: {len(consensus_values)}")
+        return
+
+    # Plot the data and anomalies
+    plt.figure(figsize=(12, 6))
+    plt.plot(s, label='Data', color='blue')
+    plt.scatter(consensus_indices, 
+                consensus_values, 
+                label='Consensus Anomaly', 
+                marker='o', 
+                color='red', 
+                s=20)
+    plt.title(f"Consensus Anomalies detected in {os.path.basename(file_path)}")
+    plt.legend()
+    plt.show()
+
+
+def main(folder_path, dataset_type, option, contamination, z_score_threshold):
+    file_list = glob.glob(os.path.join(folder_path, '*.csv'))
+    
+    for file_path in file_list:
+        print(f"Processing file: {file_path}")
+        
+        if dataset_type == 'datamill':
+            s = process_datamill(file_path)
+        elif dataset_type == 'helios':
+            s = process_helios(file_path, option)
+        elif dataset_type == 'queensland':
+            s = process_queensland(file_path, option)
+        
+        anomalies = detect_anomalies(s, contamination, z_score_threshold)
+        
+        total_consensus_anomalies = sum(pd.DataFrame(anomalies).all(axis=1))
+        print(f"Total consensus anomalies across all models: {total_consensus_anomalies}")
+        
+        plot_consensus_anomalies(s, anomalies, file_path)
+
+if __name__ == "__main__":
+    dataset_type = input("Enter dataset type (helios/queensland/datamill): ").lower()
+    while dataset_type not in ['helios', 'queensland', 'datamill']:
+        dataset_type = input("Invalid input. Please enter 'helios', 'queensland', or 'datamill': ").lower()
+
+    if dataset_type == 'helios':
+        option = input("Enter option (daily/total): ").lower()
+        while option not in ['daily', 'total']:
+            option = input("Invalid input. Please enter 'daily' or 'total': ").lower()
+    elif dataset_type == 'queensland':
+        option = input("Enter option (pulse1/pulse1_total): ").lower()
+        while option not in ['pulse1', 'pulse1_total']:
+            option = input("Invalid input. Please enter 'pulse1' or 'pulse1_total': ").lower()
     else:
-        print("Invalid choice. Please choose 1 or 2.")
+        option = 'default'
 
-if __name__ == '__main__':
-    main()
+    try:
+        z_score_threshold = float(input("Enter Z-score threshold (default 1 for datamill and helios, 3 for queensland): "))
+    except ValueError:
+        print("Invalid Z-score threshold. Using default value of 3.")
+        z_score_threshold = 3
+
+    try:
+        contamination = float(input("Enter contamination factor (default 0.01): "))
+    except ValueError:
+        print("Invalid contamination factor. Using default value of 0.01.")
+        contamination = 0.01
+
+    if dataset_type == 'helios':
+        folder_path = './dataset/helios/user_helios_sorted/'
+    elif dataset_type == 'queensland':
+        if option == 'pulse1':
+            folder_path = './dataset/queensland/user_sorted_pulse/'
+        else:
+            folder_path = './dataset/queensland/user_sorted_pulsetot/'
+    else:
+        folder_path = './dataset/datamill/user_datamill_sorted/'
+
+    main(folder_path, dataset_type, option, contamination, z_score_threshold)

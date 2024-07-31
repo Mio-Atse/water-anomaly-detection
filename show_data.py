@@ -3,79 +3,110 @@ import glob
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_water_usage_from_files(csv_folder, dataset_type='queensland'):
+def plot_water_usage_from_files(csv_folder, dataset_type, consumption_type=None):
     # Find all CSV files in the specified folder
     csv_files = glob.glob(os.path.join(csv_folder, '*.csv'))
+
+    if not csv_files:
+        print(f"No CSV files found in {csv_folder}")
+        return
 
     # Iterate through each CSV file
     for csv_file in csv_files:
         print(f"Processing file: {csv_file}")
         
-        # Read the CSV file into a DataFrame
-        if dataset_type == 'helios':
-            df = pd.read_csv(csv_file, sep=';')
-        else:
-            df = pd.read_csv(csv_file)
+        try:
+            # Read the CSV file into a DataFrame
+            if dataset_type == 'helios':
+                df = pd.read_csv(csv_file, sep=';')
+            else:
+                df = pd.read_csv(csv_file)
 
-        # Process data based on dataset type
-        if dataset_type == 'queensland':
-            process_queensland_data(df, csv_file)
-        elif dataset_type == 'helios':
-            process_helios_data(df, csv_file)
-        elif dataset_type == 'datamill':
-            process_datamil_data(df, csv_file)
-        else:
-            print(f"Unknown dataset type: {dataset_type}")
+            # Process data based on dataset type
+            if dataset_type == 'queensland':
+                process_queensland_data(df, csv_file, consumption_type)
+            elif dataset_type == 'helios':
+                process_helios_data(df, csv_file, consumption_type)
+            elif dataset_type == 'datamill':
+                process_datamill_data(df, csv_file)
+            else:
+                print(f"Unknown dataset type: {dataset_type}")
+        except Exception as e:
+            print(f"Error processing {csv_file}: {str(e)}")
 
-def process_queensland_data(df, csv_file):
-    # Convert 'time' column to datetime format
-    df['time'] = pd.to_datetime(df['time'])
+            
+def process_queensland_data(df, csv_file, queensland_type):
+    print(f"Columns in the dataframe: {df.columns.tolist()}")
+    
+    # Check if 'datetime' column exists
+    if 'datetime' not in df.columns:
+        print("No 'datetime' column found. Please check the data structure.")
+        return
 
-    # Filter only the rows where typeM is 'Pulse1_Total' and Value is numeric
-    filtered_data = df[df['typeM'] == 'Pulse1_Total']
-    filtered_data['Value'] = pd.to_numeric(filtered_data['Value'], errors='coerce')
+    # Convert datetime column to datetime format
+    df['datetime'] = pd.to_datetime(df['datetime'])
 
-    # Group by 'time' and sum 'Value' for water usage over time
-    usage_by_time = filtered_data.groupby('time')['Value'].sum()
+    # Determine the value column based on queensland_type
+    if queensland_type == 'pulse':
+        value_column = 'Pulse1'
+    elif queensland_type == 'pulsetotal':
+        value_column = 'Pulse1_Total'
+    else:
+        print(f"Unknown Queensland data type: {queensland_type}")
+        return
+
+    if value_column not in df.columns:
+        print(f"'{value_column}' column not found. Please check the data structure.")
+        return
+
+    # Convert value column to numeric, handling any non-numeric values
+    df[value_column] = pd.to_numeric(df[value_column], errors='coerce')
+
+    # Sort the dataframe by datetime
+    df = df.sort_values('datetime')
 
     # Plotting
     plt.figure(figsize=(12, 6))
-    plt.plot(usage_by_time.index, usage_by_time.values, marker='o', linestyle='-')
-    plt.title(f'Water Usage Over Time (Queensland) - {os.path.basename(csv_file)}')
+    plt.plot(df['datetime'], df[value_column], marker='o', linestyle='-')
+    plt.title(f'Water Usage Over Time (Queensland - {queensland_type}) - {os.path.basename(csv_file)}')
     plt.xlabel('Time')
-    plt.ylabel('Total Water Usage')
+    plt.ylabel('Water Usage')
     plt.grid(True)
     plt.xticks(rotation=45)
     plt.tight_layout()
     plt.show()
 
-def process_helios_data(df, csv_file):
+
+def process_helios_data(df, csv_file, consumption_type):
     # Convert 'datetime' column to datetime format
     df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
 
     # Sort the dataframe by datetime
     df = df.sort_values('datetime')
 
-    # Get unique user keys
-    user_keys = df['user key'].unique()
+    # Choose the column to plot based on consumption type
+    if consumption_type == 'daily':
+        y_column = 'diff'  # Daily consumption column
+        ylabel = 'Daily Consumption'
+    elif consumption_type == 'total':
+        y_column = 'meter reading'  # Total consumption column
+        ylabel = 'Meter Reading'
+    else:
+        print(f"Unknown consumption type: {consumption_type}")
+        return
 
-    # Plot data for each user key
-    for user_key in user_keys:
-        # Filter data for the current user
-        user_data = df[df['user key'] == user_key]
+    # Plotting
+    plt.figure(figsize=(12, 6))
+    plt.plot(df['datetime'], df[y_column], marker='o', linestyle='-')
+    plt.title(f'{ylabel} Over Time (Helios)\nFile: {os.path.basename(csv_file)}')
+    plt.xlabel('Time')
+    plt.ylabel(ylabel)
+    plt.grid(True)
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    plt.show()
 
-        # Plotting
-        plt.figure(figsize=(12, 6))
-        plt.plot(user_data['datetime'], user_data['diff'], marker='o', linestyle='-')
-        plt.title(f'Meter Reading Over Time (Helios) - User: {user_key}\nFile: {os.path.basename(csv_file)}')
-        plt.xlabel('Time')
-        plt.ylabel('Meter Reading')
-        plt.grid(True)
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        plt.show()
-
-def process_datamil_data(df, csv_file):
+def process_datamill_data(df, csv_file):
     # Convert date columns to datetime format
     df['READING_START_DATE'] = pd.to_datetime(df['READING_START_DATE'], format='%d/%m/%Y %H:%M')
     df['READING_END_DATE'] = pd.to_datetime(df['READING_END_DATE'], format='%d/%m/%Y %H:%M')
@@ -86,7 +117,7 @@ def process_datamil_data(df, csv_file):
     # Plotting
     plt.figure(figsize=(12, 6))
     plt.plot(df['READING_START_DATE'], df['GROSS_CONSUMPTION'], marker='o', linestyle='-')
-    plt.title(f'Gross Consumption Over Time (Datamil) - {os.path.basename(csv_file)}')
+    plt.title(f'Gross Consumption Over Time (Datamill) - {os.path.basename(csv_file)}')
     plt.xlabel('Time')
     plt.ylabel('Gross Consumption')
     plt.grid(True)
@@ -95,11 +126,43 @@ def process_datamil_data(df, csv_file):
     plt.show()
 
 if __name__ == '__main__':
-    # Specify the folder where your CSV files are located
-    csv_folder = './dataset/datamill'
+    # Define input folders for each dataset
+    dataset_folders = {
+        'queensland': {
+            'pulse': './dataset/queensland/user_sorted_pulse',
+            'pulsetotal': './dataset/queensland/user_sorted_pulsetot'
+        },
+        'helios': './dataset/helios/user_helios_sorted',
+        'datamill': './dataset/datamill/user_datamill_sorted'
+    }
 
-    # Specify the dataset type: 'queensland', 'helios', or 'datamil'
-    dataset_type = 'datamill'  # Change this to the desired dataset type
+    # Ask user which dataset to show
+    print("Available datasets:")
+    for key in dataset_folders.keys():
+        print(f"- {key}")
+    
+    dataset_type = input("Enter the dataset type you want to display: ").lower()
 
-    # Call the function to plot water usage for each CSV file
-    plot_water_usage_from_files(csv_folder, dataset_type)
+    if dataset_type in dataset_folders:
+        if dataset_type == 'queensland':
+            print("Queensland dataset options:")
+            print("- pulse")
+            print("- pulsetotal")
+            queensland_type = input("Enter the Queensland dataset type (pulse or pulsetotal): ").lower()
+            if queensland_type in dataset_folders['queensland']:
+                csv_folder = dataset_folders['queensland'][queensland_type]
+                plot_water_usage_from_files(csv_folder, dataset_type, queensland_type)
+            else:
+                print("Invalid Queensland dataset type. Please choose 'pulse' or 'pulsetotal'.")
+        elif dataset_type == 'helios':
+            print("Helios consumption options:")
+            print("- daily")
+            print("- total")
+            consumption_type = input("Enter the Helios consumption type (daily or total): ").lower()
+            csv_folder = dataset_folders[dataset_type]
+            plot_water_usage_from_files(csv_folder, dataset_type, consumption_type)
+        else:
+            csv_folder = dataset_folders[dataset_type]
+            plot_water_usage_from_files(csv_folder, dataset_type)
+    else:
+        print("Invalid dataset type. Please choose from the available options.")
