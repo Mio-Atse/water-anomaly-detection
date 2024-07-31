@@ -3,6 +3,15 @@ import pandas as pd
 import sys
 import shutil
 
+def replace_semicolons_with_commas(file_path):
+    # Read the CSV file
+    df = pd.read_csv(file_path, delimiter=';')
+    
+    # Replace all semicolons with commas in the entire DataFrame
+    df = df.applymap(lambda x: str(x).replace(';', ',') if isinstance(x, str) else x)
+    
+    return df
+
 def sort_and_save_datamill(input_folder, output_folder):
     # Ensure the output folder exists
     os.makedirs(output_folder, exist_ok=True)
@@ -111,10 +120,11 @@ if dataset_choice == 'queensland':
 elif dataset_choice == 'helios':
     # Directories for Helios dataset
     helios_input_folder = './dataset/helios/user_dataset/'
-    helios_output_folder = './dataset/helios/user_helios_sorted/'
+    helios_output_folder = './dataset/helios/user_helios_sorted_semicol/'
 
     # Sort and save the files for Helios dataset
     sort_and_save_helios(helios_input_folder, helios_output_folder)
+    
     
     try:
         shutil.rmtree("./dataset/helios/user_dataset")

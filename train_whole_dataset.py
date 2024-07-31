@@ -9,7 +9,6 @@ from sklearn.preprocessing import StandardScaler
 import joblib
 
 def process_file(file_path, value_column, contamination=0.01):
-    print(value_column)
     print(f"Processing file: {file_path}")
     try:
         # Read the CSV file
