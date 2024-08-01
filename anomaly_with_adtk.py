@@ -12,7 +12,7 @@ def process_datamill(file_path):
     return df['GROSS_CONSUMPTION']
 
 def process_helios(file_path, option):
-    df = pd.read_csv(file_path, sep=';')
+    df = pd.read_csv(file_path)
     df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
     df = df.set_index('datetime')
     if option == 'daily':
@@ -21,10 +21,10 @@ def process_helios(file_path, option):
         return df['meter reading']
 
 def process_queensland(file_path, option):
-    df = pd.read_csv(file_path)
+    df = pd.read_csv(file_path,sep=',')
     df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
     df = df.set_index('datetime')
-    if option == 'pulse1':
+    if option == 'daily':
         return df['Pulse1']
     else:  # pulse1_total
         return df['Pulse1_Total']
@@ -116,8 +116,8 @@ if __name__ == "__main__":
         while option not in ['daily', 'total']:
             option = input("Invalid input. Please enter 'daily' or 'total': ").lower()
     elif dataset_type == 'queensland':
-        option = input("Enter option (pulse1/pulse1_total): ").lower()
-        while option not in ['pulse1', 'pulse1_total']:
+        option = input("Enter option (daily/total): ").lower()
+        while option not in ['daily', 'total']:
             option = input("Invalid input. Please enter 'pulse1' or 'pulse1_total': ").lower()
     else:
         option = 'default'
@@ -137,7 +137,7 @@ if __name__ == "__main__":
     if dataset_type == 'helios':
         folder_path = './dataset/helios/user_helios_sorted/'
     elif dataset_type == 'queensland':
-        if option == 'pulse1':
+        if option == 'daily':
             folder_path = './dataset/queensland/user_sorted_pulse/'
         else:
             folder_path = './dataset/queensland/user_sorted_pulsetot/'

@@ -23,18 +23,21 @@ def process_file(file_path, dataset_type, option, contamination=0.01, models=Non
     elif dataset_type == 'queensland':
         try:
             df['datetime'] = pd.to_datetime(df['datetime'], format='%d/%m/%Y %H:%M:%S')
-            if option == 'pulse1':
+            if option == 'daily':
                 df['diff'] = df['Pulse1'].diff()
-            elif option == 'pulse1_total':
+            elif option == 'total':
                 df['diff'] = df['Pulse1_Total'].diff()
         except ValueError as e:
             print(f"Error converting datetime: {e}")
             print(f"First few datetime values: {df['datetime'].head()}")
             raise
-
+    
     elif dataset_type == 'datamill':
         df['datetime'] = pd.to_datetime(df['READING_START_DATE'], format='%d/%m/%Y %H:%M')
-        df['diff'] = df['GROSS_CONSUMPTION'].diff()
+        if option == 'daily':
+            df['diff'] = df['DAILY_AVERAGE_CONSUMPTION'].diff()
+        else:
+            df['diff'] = df['GROSS_CONSUMPTION'].diff()
 
     # Sort by datetime
     df = df.sort_values('datetime')
@@ -133,12 +136,13 @@ if dataset_type == 'helios':
     while option not in ['daily', 'total']:
         option = input("Invalid input. Please enter 'daily' or 'total': ").lower()
 elif dataset_type == 'queensland':
-    option = input("Enter option (pulse1/pulse1_total): ").lower()
-    while option not in ['pulse1', 'pulse1_total']:
-        option = input("Invalid input. Please enter 'pulse1' or 'pulse1_total': ").lower()
-else:
-    option = 'default'
-
+    option = input("Enter option (daily/total): ").lower()
+    while option not in ['daily', 'total']:
+        option = input("Invalid input. Please enter 'daily' or 'total': ").lower()
+elif dataset_type == 'datamill':
+    option = input("Enter option (daily/total): ").lower()
+    while option not in ['daily', 'total']:
+        option = input("Invalid input. Please enter 'daily' or 'total': ").lower()
 # Get user input for Z-score and contamination
 try:
     z_score_threshold = float(input("Enter Z-score threshold (default 1 for datamill and helios 3 for queensland): "))
@@ -156,7 +160,7 @@ except ValueError:
 if dataset_type == 'helios':
     folder_path = './dataset/helios/user_helios_sorted/'
 elif dataset_type == 'queensland':
-    if option == 'pulse1':
+    if option == 'daily':
         folder_path = './dataset/queensland/user_sorted_pulse/'
     else:
         folder_path = './dataset/queensland/user_sorted_pulsetot/'

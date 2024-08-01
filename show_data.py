@@ -18,7 +18,7 @@ def plot_water_usage_from_files(csv_folder, dataset_type, consumption_type=None)
         try:
             # Read the CSV file into a DataFrame
             if dataset_type == 'helios':
-                df = pd.read_csv(csv_file, sep=';')
+                df = pd.read_csv(csv_file, sep=',')
             else:
                 df = pd.read_csv(csv_file)
 
@@ -28,7 +28,7 @@ def plot_water_usage_from_files(csv_folder, dataset_type, consumption_type=None)
             elif dataset_type == 'helios':
                 process_helios_data(df, csv_file, consumption_type)
             elif dataset_type == 'datamill':
-                process_datamill_data(df, csv_file)
+                process_datamill_data(df, csv_file,consumption_type)
             else:
                 print(f"Unknown dataset type: {dataset_type}")
         except Exception as e:
@@ -106,17 +106,16 @@ def process_helios_data(df, csv_file, consumption_type):
     plt.tight_layout()
     plt.show()
 
-def process_datamill_data(df, csv_file):
+def process_datamill_data(df, csv_file,consumption_type):
     # Convert date columns to datetime format
     df['READING_START_DATE'] = pd.to_datetime(df['READING_START_DATE'], format='%d/%m/%Y %H:%M')
-    df['READING_END_DATE'] = pd.to_datetime(df['READING_END_DATE'], format='%d/%m/%Y %H:%M')
-
     # Sort the dataframe by start date
+
     df = df.sort_values('READING_START_DATE')
 
     # Plotting
     plt.figure(figsize=(12, 6))
-    plt.plot(df['READING_START_DATE'], df['GROSS_CONSUMPTION'], marker='o', linestyle='-')
+    plt.plot(df['READING_START_DATE'], df[consumption_type], marker='o', linestyle='-')
     plt.title(f'Gross Consumption Over Time (Datamill) - {os.path.basename(csv_file)}')
     plt.xlabel('Time')
     plt.ylabel('Gross Consumption')
@@ -146,8 +145,8 @@ if __name__ == '__main__':
     if dataset_type in dataset_folders:
         if dataset_type == 'queensland':
             print("Queensland dataset options:")
-            print("- pulse")
-            print("- pulsetotal")
+            print("- daily")
+            print("- total")
             queensland_type = input("Enter the Queensland dataset type (pulse or pulsetotal): ").lower()
             if queensland_type in dataset_folders['queensland']:
                 csv_folder = dataset_folders['queensland'][queensland_type]
@@ -162,7 +161,16 @@ if __name__ == '__main__':
             csv_folder = dataset_folders[dataset_type]
             plot_water_usage_from_files(csv_folder, dataset_type, consumption_type)
         else:
+            print("Datamill consumption options:")
+            print("- daily")
+            print("- total")
+            user_input_cons= input("Enter the Datamill consumption type (daily or total): ").lower()
             csv_folder = dataset_folders[dataset_type]
-            plot_water_usage_from_files(csv_folder, dataset_type)
+            if user_input_cons == 'daily':
+                consumption_type = 'DAILY_AVERAGE_CONSUMPTION'
+            else:
+                consumption_type = 'GROSS_CONSUMPTION'
+
+            plot_water_usage_from_files(csv_folder, dataset_type,consumption_type)
     else:
         print("Invalid dataset type. Please choose from the available options.")
