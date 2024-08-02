@@ -1,3 +1,6 @@
+# Installation
+- İnstall required python libraries.
+```pip install -r requirements.txt``` 
 # Data Preparation
 ## 1. Download and Organize Datasets
 
