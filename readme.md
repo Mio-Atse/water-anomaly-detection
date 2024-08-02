@@ -77,6 +77,7 @@ mv swm_trialA_1K.csv org_dataset/
 - Run the `replace_semicolon.py` script to replace semicolons with commas in the Helios dataset.
 
 # Usage
+- Use show_data.py to examine csv files.
 - Use `anomaly_detection_water_meter.ipynb` to use all scripts at one file on Google Colab. Make sure to upload your datasets on your respective Google Drive path. 
 - Use `anomaly_with_pyod.py` for anomaly detection with the Python PYOD library.
    - Train the files one by one for detection.
